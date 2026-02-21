@@ -1,6 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace PodcastScrobbler.Tests.Endpoints;
 
@@ -136,5 +139,35 @@ public class SubmitListensTests : IClassFixture<ScrobblerWebApplicationFactory>
         var noAuthHttpClient = factory.CreateClient();
         var response = await noAuthHttpClient.PostAsJsonAsync("/1/submit-listens", request);
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UnhandledException_Returns500WithCleanJson()
+    {
+        await using var throwingFactory = new ScrobblerWebApplicationFactory()
+            .WithWebHostBuilder(b => b.ConfigureServices(services =>
+                services.AddSingleton<IStartupFilter>(new ThrowingEndpointFilter())));
+
+        var client = throwingFactory.CreateClient();
+        client.DefaultRequestHeaders.Add("Authorization", "Token test-token");
+
+        var response = await client.GetAsync("/_test/throw");
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(500, body.GetProperty("code").GetInt32());
+        Assert.Equal("Internal server error", body.GetProperty("error").GetString());
+    }
+
+    private sealed class ThrowingEndpointFilter : IStartupFilter
+    {
+        public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
+        {
+            next(app);
+            // Registered after the inner pipeline so exceptions bubble up to the exception handler
+            app.Map("/_test/throw", branch =>
+                branch.Run(_ => throw new InvalidOperationException("Simulated unhandled exception")));
+        };
     }
 }
