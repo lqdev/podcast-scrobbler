@@ -1,0 +1,30 @@
+properties:
+  managedEnvironmentId: /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.App/managedEnvironments/{env}
+  configuration:
+    ingress:
+      external: true
+      targetPort: 5000
+  template:
+    containers:
+      - name: podcast-scrobbler
+        image: ghcr.io/lqdev/podcast-scrobbler:latest
+        resources:
+          cpu: 0.25
+          memory: 0.5Gi
+        env:
+          - name: PORT
+            value: "5000"
+          - name: DATABASE_PATH
+            value: "/data/scrobbles.db"
+          - name: SCROBBLER_TOKEN
+            secretRef: scrobbler-token
+        volumeMounts:
+          - volumeName: scrobbler-data
+            mountPath: /data
+    volumes:
+      - name: scrobbler-data
+        storageType: AzureFile
+        storageName: scrobblerdata
+    scale:
+      minReplicas: 0
+      maxReplicas: 1
