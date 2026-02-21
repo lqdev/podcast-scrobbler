@@ -8,6 +8,9 @@ public static class GetListensEndpoint
     {
         app.MapGet("/1/user/{username}/listens", async (string username, int? count, long? max_ts, long? min_ts, ListenRepository repo) =>
         {
+            if (max_ts.HasValue && min_ts.HasValue)
+                return Results.BadRequest(new { error = "Cannot specify both max_ts and min_ts." });
+
             var actualCount = Math.Clamp(count ?? 25, 1, 100);
 
             var listens = await repo.GetListens(username, actualCount, max_ts, min_ts);

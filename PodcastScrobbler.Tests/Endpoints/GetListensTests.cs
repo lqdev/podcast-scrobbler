@@ -64,4 +64,15 @@ public class GetListensTests : IClassFixture<ScrobblerWebApplicationFactory>
         var listens = content.GetProperty("payload").GetProperty("listens");
         Assert.True(listens.GetArrayLength() > 0);
     }
+
+    [Fact]
+    public async Task GetListens_BothMaxTsAndMinTs_ReturnsBadRequest()
+    {
+        var response = await _client.GetAsync("/1/user/default/listens?max_ts=1740099999&min_ts=1740098000");
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Contains("max_ts", body.GetProperty("error").GetString());
+        Assert.Contains("min_ts", body.GetProperty("error").GetString());
+    }
 }
