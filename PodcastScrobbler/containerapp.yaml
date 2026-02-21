@@ -18,6 +18,23 @@ properties:
             value: "/data/scrobbles.db"
           - name: SCROBBLER_TOKEN
             secretRef: scrobbler-token
+        probes:
+          - type: liveness
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 30
+            timeoutSeconds: 3
+            failureThreshold: 3
+          - type: readiness
+            httpGet:
+              path: /ready
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
         volumeMounts:
           - volumeName: scrobbler-data
             mountPath: /data
