@@ -8,7 +8,18 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Configuration
 var config = new ScrobblerConfig();
-builder.Configuration.Bind(config);
+builder.Configuration.GetSection("Scrobbler").Bind(config);
+
+// Env vars take precedence (explicit overlay)
+if (Environment.GetEnvironmentVariable("DATABASE_PATH") is { } dbPath)
+    config.DatabasePath = dbPath;
+if (Environment.GetEnvironmentVariable("SCROBBLER_TOKEN") is { } token)
+    config.ScrobblerToken = token;
+if (Environment.GetEnvironmentVariable("SCROBBLER_REQUIRE_AUTH_FOR_READS") is { } authReads)
+    config.RequireAuthForReads = string.Equals(authReads, "true", StringComparison.OrdinalIgnoreCase);
+if (Environment.GetEnvironmentVariable("PORT") is { } envPort)
+    config.Port = envPort;
+
 builder.Services.AddSingleton(config);
 
 // Port configuration
