@@ -68,7 +68,7 @@ public class SubmitListensTests : IClassFixture<ScrobblerWebApplicationFactory>
     }
 
     [Fact]
-    public async Task SubmitImport_ReturnsOk()
+    public async Task SubmitImport_ReturnsOkWithCounts()
     {
         var request = new
         {
@@ -90,6 +90,33 @@ public class SubmitListensTests : IClassFixture<ScrobblerWebApplicationFactory>
 
         var response = await _client.PostAsJsonAsync("/1/submit-listens", request);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("ok", body.GetProperty("status").GetString());
+        Assert.Equal(2, body.GetProperty("imported").GetInt32());
+        Assert.Equal(0, body.GetProperty("skipped").GetInt32());
+    }
+
+    [Fact]
+    public async Task ImportWithMissingTimestamps_ReportsSkippedCount()
+    {
+        var request = new
+        {
+            listen_type = "import",
+            payload = new object[]
+            {
+                new { listened_at = 1740098330L, track_metadata = new { artist_name = "Pod", track_name = "Ep1" } },
+                new { track_metadata = new { artist_name = "Pod", track_name = "Ep2" } }  // missing listened_at
+            }
+        };
+
+        var response = await _client.PostAsJsonAsync("/1/submit-listens", request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("ok", body.GetProperty("status").GetString());
+        Assert.Equal(1, body.GetProperty("imported").GetInt32());
+        Assert.Equal(1, body.GetProperty("skipped").GetInt32());
     }
 
     [Fact]
