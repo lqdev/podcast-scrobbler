@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Diagnostics;
 using PodcastScrobbler.Config;
 using PodcastScrobbler.Data;
 using PodcastScrobbler.Endpoints;
@@ -34,6 +35,24 @@ await db.Initialize();
 // Load playing_now state
 var playingNowStore = app.Services.GetRequiredService<PlayingNowStore>();
 await playingNowStore.LoadFromDb();
+
+// Startup diagnostics
+app.Logger.LogInformation("Database: {Path}", config.DatabasePath);
+app.Logger.LogInformation("Auth: {Status}", string.IsNullOrEmpty(config.ScrobblerToken) ? "disabled" : "enabled");
+app.Logger.LogInformation("Listening on port {Port}", config.Port);
+
+// Global exception handler — must be first in pipeline to catch all downstream exceptions
+app.UseExceptionHandler(errorApp =>
+{
+    errorApp.Run(async context =>
+    {
+        var ex = context.Features.Get<IExceptionHandlerFeature>()?.Error;
+        app.Logger.LogError(ex, "Unhandled exception on {Method} {Path}", context.Request.Method, context.Request.Path);
+        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+        context.Response.ContentType = "application/json";
+        await context.Response.WriteAsync("""{"code": 500, "error": "Internal server error"}""");
+    });
+});
 
 // Middleware
 app.UseMiddleware<OptionalTokenAuth>();
