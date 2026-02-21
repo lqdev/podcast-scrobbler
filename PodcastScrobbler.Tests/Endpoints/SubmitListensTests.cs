@@ -187,6 +187,53 @@ public class SubmitListensTests : IClassFixture<ScrobblerWebApplicationFactory>
         Assert.Equal("Internal server error", body.GetProperty("error").GetString());
     }
 
+    [Fact]
+    public async Task SubmitWithAdditionalInfo_RoundTrips()
+    {
+        var request = new
+        {
+            listen_type = "single",
+            payload = new[]
+            {
+                new
+                {
+                    listened_at = 1740300000L,
+                    track_metadata = new
+                    {
+                        artist_name = "AdditionalInfo Pod",
+                        track_name = "AdditionalInfo Episode",
+                        additional_info = new
+                        {
+                            podcast_feed_url = "https://example.com/feed.rss",
+                            episode_guid = "guid-abc-123",
+                            duration_ms = 3600000,
+                            position_ms = 1800000,
+                            percent_complete = 50.0
+                        }
+                    }
+                }
+            }
+        };
+
+        var submitResponse = await _client.PostAsJsonAsync("/1/submit-listens", request);
+        Assert.Equal(HttpStatusCode.OK, submitResponse.StatusCode);
+
+        var getResponse = await _client.GetAsync("/1/user/default/listens");
+        Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
+
+        var body = await getResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var listens = body.GetProperty("payload").GetProperty("listens").EnumerateArray();
+        var targetListen = listens.FirstOrDefault(l => l.GetProperty("listened_at").GetInt64() == 1740300000L);
+        Assert.False(targetListen.Equals(default(JsonElement)), "Could not find listen with timestamp 1740300000");
+
+        var additionalInfo = targetListen.GetProperty("track_metadata").GetProperty("additional_info");
+        Assert.Equal("https://example.com/feed.rss", additionalInfo.GetProperty("podcast_feed_url").GetString());
+        Assert.Equal("guid-abc-123", additionalInfo.GetProperty("episode_guid").GetString());
+        Assert.Equal(3600000, additionalInfo.GetProperty("duration_ms").GetInt32());
+        Assert.Equal(1800000, additionalInfo.GetProperty("position_ms").GetInt32());
+        Assert.Equal(50.0, additionalInfo.GetProperty("percent_complete").GetDouble());
+    }
+
     private sealed class ThrowingEndpointFilter : IStartupFilter
     {
         public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>

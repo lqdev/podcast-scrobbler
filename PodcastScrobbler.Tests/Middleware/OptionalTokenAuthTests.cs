@@ -1,5 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.DependencyInjection;
+using PodcastScrobbler.Config;
 
 namespace PodcastScrobbler.Tests.Middleware;
 
@@ -80,5 +83,29 @@ public class OptionalTokenAuthTests : IClassFixture<ScrobblerWebApplicationFacto
         var client = _factory.CreateClient();
         var response = await client.GetAsync("/1/validate-token?token=test-token");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ReadEndpoint_WithRequireAuthForReads_ReturnsUnauthorized()
+    {
+        await using var requireAuthFactory = new ScrobblerWebApplicationFactory()
+            .WithWebHostBuilder(b => b.ConfigureServices(services =>
+            {
+                var descriptor = services.SingleOrDefault(d => d.ServiceType == typeof(ScrobblerConfig));
+                if (descriptor != null) services.Remove(descriptor);
+                services.AddSingleton(new ScrobblerConfig
+                {
+                    DatabasePath = ":memory:",
+                    ScrobblerToken = "test-token",
+                    RequireAuthForReads = true,
+                    Port = "5000"
+                });
+            }));
+
+        var client = requireAuthFactory.CreateClient();
+        // No Authorization header
+
+        var response = await client.GetAsync("/1/user/default/listens");
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 }
