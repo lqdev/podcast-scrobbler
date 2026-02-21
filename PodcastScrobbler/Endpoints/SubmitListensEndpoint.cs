@@ -59,18 +59,20 @@ public static class SubmitListensEndpoint
 
                 case "import":
                 {
-                    var listens = request.Payload
-                        .Where(p => p.ListenedAt.HasValue)
-                        .Select(p => new Listen
-                        {
-                            Username = "default",
-                            ListenedAt = p.ListenedAt!.Value,
-                            ArtistName = p.TrackMetadata.ArtistName,
-                            TrackName = p.TrackMetadata.TrackName,
-                            AdditionalInfo = p.TrackMetadata.AdditionalInfo
-                        });
+                    var valid = request.Payload.Where(p => p.ListenedAt.HasValue).ToList();
+                    var skipped = request.Payload.Count - valid.Count;
+
+                    var listens = valid.Select(p => new Listen
+                    {
+                        Username = "default",
+                        ListenedAt = p.ListenedAt!.Value,
+                        ArtistName = p.TrackMetadata.ArtistName,
+                        TrackName = p.TrackMetadata.TrackName,
+                        AdditionalInfo = p.TrackMetadata.AdditionalInfo
+                    });
                     await repo.InsertListens(listens);
-                    break;
+
+                    return Results.Ok(new { status = "ok", imported = valid.Count, skipped });
                 }
             }
 
