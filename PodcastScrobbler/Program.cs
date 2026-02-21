@@ -22,9 +22,13 @@ if (Environment.GetEnvironmentVariable("PORT") is { } envPort)
 
 builder.Services.AddSingleton(config);
 
-// Port configuration
-var port = config.Port;
-builder.WebHost.UseUrls($"http://+:{port}");
+// Port configuration — validate before Kestrel attempts to bind
+if (!int.TryParse(config.Port, out var parsedPort) || parsedPort < 1 || parsedPort > 65535)
+{
+    Console.Error.WriteLine($"[crit] Invalid configuration value for 'Port': '{config.Port}'. Must be an integer between 1 and 65535. Exiting application.");
+    Environment.Exit(1);
+}
+builder.WebHost.UseUrls($"http://+:{parsedPort}");
 
 // DI registrations
 builder.Services.AddSingleton<DuckDbContext>();
@@ -50,7 +54,7 @@ await playingNowStore.LoadFromDb();
 // Startup diagnostics
 app.Logger.LogInformation("Database: {Path}", config.DatabasePath);
 app.Logger.LogInformation("Auth: {Status}", string.IsNullOrEmpty(config.ScrobblerToken) ? "disabled" : "enabled");
-app.Logger.LogInformation("Listening on port {Port}", config.Port);
+app.Logger.LogInformation("Listening on port {Port}", parsedPort);
 
 // Global exception handler — must be first in pipeline to catch all downstream exceptions
 app.UseExceptionHandler(errorApp =>
