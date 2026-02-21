@@ -167,7 +167,7 @@ public class SubmitListensTests : IClassFixture<ScrobblerWebApplicationFactory>
             next(app);
             // Registered after the inner pipeline so exceptions bubble up to the exception handler
             app.Map("/_test/throw", branch =>
-                branch.Run(_ => throw new InvalidOperationException("Simulated unhandled exception")));
+                branch.Run(async _ => throw new InvalidOperationException("Simulated unhandled exception")));
         };
     }
 }
