@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: |
+          dotnet restore PodcastScrobbler/PodcastScrobbler.csproj
+          dotnet restore PodcastScrobbler.Tests/PodcastScrobbler.Tests.csproj
+
+      - name: Build
+        run: dotnet build PodcastScrobbler/PodcastScrobbler.csproj --no-restore
+
+      - name: Test
+        run: dotnet test PodcastScrobbler.Tests/PodcastScrobbler.Tests.csproj --no-restore --verbosity normal
+
+  docker:
+    needs: build-and-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./PodcastScrobbler
+          push: true
+          tags: |
+            ghcr.io/lqdev/podcast-scrobbler:latest
+            ghcr.io/${{ github.repository }}:${{ github.sha }}
