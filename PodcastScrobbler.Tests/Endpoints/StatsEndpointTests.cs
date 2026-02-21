@@ -39,7 +39,12 @@ public class StatsEndpointTests : IClassFixture<ScrobblerWebApplicationFactory>
                 }
             };
 
-        await _client.PostAsJsonAsync("/1/submit-listens", new { listen_type = "single", payload });
+        var submitResponse = await _client.PostAsJsonAsync("/1/submit-listens", new { listen_type = "single", payload });
+        var submitBody = await submitResponse.Content.ReadAsStringAsync();
+        Assert.True(
+            submitResponse.StatusCode == HttpStatusCode.OK,
+            $"Submit-listens failed with status code {submitResponse.StatusCode}. Response body: {submitBody}"
+        );
     }
 
     [Fact]
@@ -67,17 +72,36 @@ public class StatsEndpointTests : IClassFixture<ScrobblerWebApplicationFactory>
     [Fact]
     public async Task Summary_WithListens_ReturnsCorrectCounts()
     {
+        // Capture initial summary so we can assert on deltas while tolerating shared state
+        var initialResponse = await _client.GetAsync("/1/user/default/stats/summary");
+        initialResponse.EnsureSuccessStatusCode();
+        var initialBody = await initialResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var initialPayload = initialBody.GetProperty("payload");
+
+        var initialTotalListens = initialPayload.GetProperty("total_listens").GetInt32();
+        var initialUniquePodcasts = initialPayload.GetProperty("unique_podcasts").GetInt32();
+        var initialUniqueEpisodes = initialPayload.GetProperty("unique_episodes").GetInt32();
+
         await SubmitListen("Stats Pod A", "Ep 1", 1740100001L, 3600000L);
         await SubmitListen("Stats Pod A", "Ep 2", 1740100002L, 1800000L);
         await SubmitListen("Stats Pod B", "Ep 1", 1740100003L);
 
         var response = await _client.GetAsync("/1/user/default/stats/summary");
+        response.EnsureSuccessStatusCode();
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         var payload = body.GetProperty("payload");
 
-        Assert.True(payload.GetProperty("total_listens").GetInt32() >= 3);
-        Assert.True(payload.GetProperty("unique_podcasts").GetInt32() >= 2);
-        Assert.True(payload.GetProperty("unique_episodes").GetInt32() >= 2); // "Ep 1" + "Ep 2" = 2 distinct track_names
+        var totalListens = payload.GetProperty("total_listens").GetInt32();
+        var uniquePodcasts = payload.GetProperty("unique_podcasts").GetInt32();
+        var uniqueEpisodes = payload.GetProperty("unique_episodes").GetInt32();
+
+        // Exactly three new listens should have been added
+        Assert.Equal(initialTotalListens + 3, totalListens);
+
+        // These listens involve at most two new podcasts and two new episode names,
+        // but some may already exist from other tests, so we assert within bounds.
+        Assert.InRange(uniquePodcasts, initialUniquePodcasts, initialUniquePodcasts + 2);
+        Assert.InRange(uniqueEpisodes, initialUniqueEpisodes, initialUniqueEpisodes + 2);
     }
 
     [Fact]
