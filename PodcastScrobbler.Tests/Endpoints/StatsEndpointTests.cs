@@ -149,4 +149,61 @@ public class StatsEndpointTests : IClassFixture<ScrobblerWebApplicationFactory>
         Assert.False(first.TryGetProperty("ListenCount", out _), "Found PascalCase 'ListenCount'");
         Assert.False(first.TryGetProperty("TotalListenTimeMs", out _), "Found PascalCase 'TotalListenTimeMs'");
     }
+
+    [Fact]
+    public async Task RecentPodcasts_ReturnsDistinctPodcastNames()
+    {
+        await SubmitListen("Recent Pod A", "Ep 1", 1740250001L);
+        await SubmitListen("Recent Pod A", "Ep 2", 1740250002L);
+        await SubmitListen("Recent Pod B", "Ep 1", 1740250003L);
+
+        var response = await _client.GetAsync("/1/user/default/stats/recent-podcasts");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var payload = body.GetProperty("payload");
+        Assert.Equal(JsonValueKind.Array, payload.ValueKind);
+
+        var podcastNames = payload.EnumerateArray().Select(p => p.GetString()).ToList();
+        Assert.Contains("Recent Pod A", podcastNames);
+        Assert.Contains("Recent Pod B", podcastNames);
+        // Verify no duplicates — "Recent Pod A" was submitted twice but should appear only once
+        Assert.Equal(podcastNames.Distinct().Count(), podcastNames.Count);
+    }
+
+    [Fact]
+    public async Task Stats_UnknownUser_ReturnsEmptyOrZero()
+    {
+        var username = "unknown-user-xyz-never-exists";
+
+        // Test /stats/podcasts
+        var podcastsResponse = await _client.GetAsync($"/1/user/{username}/stats/podcasts");
+        Assert.Equal(HttpStatusCode.OK, podcastsResponse.StatusCode);
+        var podcastsBody = await podcastsResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var podcastsPayload = podcastsBody.GetProperty("payload");
+        Assert.Equal(0, podcastsPayload.GetArrayLength());
+
+        // Test /stats/weekly
+        var weeklyResponse = await _client.GetAsync($"/1/user/{username}/stats/weekly");
+        Assert.Equal(HttpStatusCode.OK, weeklyResponse.StatusCode);
+        var weeklyBody = await weeklyResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var weeklyPayload = weeklyBody.GetProperty("payload");
+        Assert.Equal(0, weeklyPayload.GetArrayLength());
+
+        // Test /stats/recent-podcasts
+        var recentResponse = await _client.GetAsync($"/1/user/{username}/stats/recent-podcasts");
+        Assert.Equal(HttpStatusCode.OK, recentResponse.StatusCode);
+        var recentBody = await recentResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var recentPayload = recentBody.GetProperty("payload");
+        Assert.Equal(0, recentPayload.GetArrayLength());
+
+        // Test /stats/summary
+        var summaryResponse = await _client.GetAsync($"/1/user/{username}/stats/summary");
+        Assert.Equal(HttpStatusCode.OK, summaryResponse.StatusCode);
+        var summaryBody = await summaryResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var summaryPayload = summaryBody.GetProperty("payload");
+        Assert.Equal(0, summaryPayload.GetProperty("total_listens").GetInt32());
+        Assert.Equal(0, summaryPayload.GetProperty("unique_podcasts").GetInt32());
+        Assert.Equal(0, summaryPayload.GetProperty("unique_episodes").GetInt32());
+    }
 }
